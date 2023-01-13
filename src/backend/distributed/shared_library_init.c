@@ -475,6 +475,8 @@ _PG_init(void)
 	/* initialize shard split shared memory handle management */
 	InitializeShardSplitSMHandleManagement();
 
+	InitializeMultiTenantMonitorSMHandleManagement();
+
 	/* enable modification of pg_catalog tables during pg_upgrade */
 	if (IsBinaryUpgrade)
 	{
@@ -1897,6 +1899,16 @@ RegisterCitusConfigVariables(void)
 		gettext_noop("Sets the level of multi task query execution log messages"),
 		NULL,
 		&MultiTaskQueryLogLevel,
+		CITUS_LOG_LEVEL_OFF, log_level_options,
+		PGC_USERSET,
+		GUC_STANDARD,
+		NULL, NULL, NULL);
+	
+	DefineCustomEnumVariable(
+		"citus.multi_tenant_monitoring_log_level",
+		gettext_noop("Sets the level of multi tenant monitoring log messages"),
+		NULL,
+		&MultiTenantMonitoringLogLevel,
 		CITUS_LOG_LEVEL_OFF, log_level_options,
 		PGC_USERSET,
 		GUC_STANDARD,
