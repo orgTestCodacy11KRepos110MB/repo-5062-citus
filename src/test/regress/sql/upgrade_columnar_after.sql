@@ -160,7 +160,7 @@ DROP TABLE columnar_schema_members, columnar_schema_members_pg_depend;
 
 -- Check the same for workers too.
 
-SELECT run_command_on_workers(
+SELECT success, result FROM run_command_on_workers(
 $$
 SELECT pg_class.oid INTO columnar_schema_members
 FROM pg_class, pg_namespace
@@ -177,7 +177,7 @@ WHERE classid = 'pg_am'::regclass::oid AND
 $$
 );
 
-SELECT run_command_on_workers(
+SELECT success, result FROM run_command_on_workers(
 $$
 (TABLE columnar_schema_members EXCEPT TABLE columnar_schema_members_pg_depend)
 UNION
@@ -185,13 +185,13 @@ UNION
 $$
 );
 
-SELECT run_command_on_workers(
+SELECT success, result FROM run_command_on_workers(
 $$
 SELECT COUNT(*)=10 FROM columnar_schema_members_pg_depend;
 $$
 );
 
-SELECT run_command_on_workers(
+SELECT success, result FROM run_command_on_workers(
 $$
 DROP TABLE columnar_schema_members, columnar_schema_members_pg_depend;
 $$
