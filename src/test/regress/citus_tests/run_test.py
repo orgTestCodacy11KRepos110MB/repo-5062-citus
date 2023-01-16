@@ -110,6 +110,22 @@ if test_file_name not in test_files_to_run_without_schedule:
     shutil.copy2(os.path.join(regress_dir, test_schedule), tmp_schedule_path)
 with open(tmp_schedule_path, "a") as myfile:
         for i in range(args['repeat']):
+            if test_schedule_line.startswith('test: upgrade_') and '_after' in test_schedule_line:
+                # Assume that given test schedule line belongs to "after-upgrade" phase of an
+                # upgrade test when the above condition holds. This is not a great way to detect
+                # after-upgrade tests but seems like a safe assumption atm.
+                #
+                # And if that's the case, replace all the occurrences of '_after' with '_before'
+                # to deduce a schedule line for "before-upgrade" phase. We need to add the
+                # corresponding before-schedule before each after-schedule line because the tests
+                # that belong to after-upgrade tests depend on the objects created earlier.
+                #
+                # e.g.:
+                #   "test: upgrade_basic_after upgrade_type_after upgrade_ref2ref_after"
+                # becomes
+                #   "test: upgrade_basic_before upgrade_type_before upgrade_ref2ref_before"
+                before_sql_schedule_line = test_schedule_line.replace('_after', '_before')
+                myfile.write(before_sql_schedule_line)
             myfile.write(test_schedule_line)
 
 # find suitable make recipe
