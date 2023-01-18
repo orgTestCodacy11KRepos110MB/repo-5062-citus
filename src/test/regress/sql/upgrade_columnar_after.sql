@@ -137,7 +137,12 @@ ROLLBACK;
 SELECT pg_class.oid INTO columnar_schema_members
 FROM pg_class, pg_namespace
 WHERE pg_namespace.oid=pg_class.relnamespace AND
-      pg_namespace.nspname='columnar_internal';
+      pg_namespace.nspname='columnar_internal' AND
+      pg_class.relname NOT IN ('chunk_group_pkey',
+                               'chunk_pkey',
+                               'options_pkey',
+                               'stripe_first_row_number_idx',
+                               'stripe_pkey');
 SELECT refobjid INTO columnar_schema_members_pg_depend
 FROM pg_depend
 WHERE classid = 'pg_am'::regclass::oid AND
@@ -153,8 +158,8 @@ UNION
 (TABLE columnar_schema_members_pg_depend EXCEPT TABLE columnar_schema_members);
 
 -- ... , and both columnar_schema_members_pg_depend & columnar_schema_members
--- should have 10 entries.
-SELECT COUNT(*)=10 FROM columnar_schema_members_pg_depend;
+-- should have 5 entries.
+SELECT COUNT(*)=5 FROM columnar_schema_members_pg_depend;
 
 DROP TABLE columnar_schema_members, columnar_schema_members_pg_depend;
 
@@ -165,7 +170,12 @@ $$
 SELECT pg_class.oid INTO columnar_schema_members
 FROM pg_class, pg_namespace
 WHERE pg_namespace.oid=pg_class.relnamespace AND
-	  pg_namespace.nspname='columnar_internal';
+      pg_namespace.nspname='columnar_internal' AND
+      pg_class.relname NOT IN ('chunk_group_pkey',
+                               'chunk_pkey',
+                               'options_pkey',
+                               'stripe_first_row_number_idx',
+                               'stripe_pkey');
 SELECT refobjid INTO columnar_schema_members_pg_depend
 FROM pg_depend
 WHERE classid = 'pg_am'::regclass::oid AND
@@ -187,7 +197,7 @@ $$
 
 SELECT success, result FROM run_command_on_workers(
 $$
-SELECT COUNT(*)=10 FROM columnar_schema_members_pg_depend;
+SELECT COUNT(*)=5 FROM columnar_schema_members_pg_depend;
 $$
 );
 
