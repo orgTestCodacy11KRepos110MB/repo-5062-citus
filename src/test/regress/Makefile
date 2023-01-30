@@ -56,19 +56,11 @@ ISOLATION_BUILDDIR=build/specs
 # ex: make print-generated_isolation_files
 print-%  : ; @echo $* = $($*)
 
-.PHONY: create-symbolic-link create-tablespaces
+.PHONY: create-symbolic-link
 
 create-symbolic-link:
 	mkdir -p $(citus_abs_srcdir)/build
 	ln -fsn $(citus_abs_srcdir)/expected $(citus_abs_srcdir)/build/
-
-create-tablespaces:
-	rm -rf $(citus_abs_srcdir)/tmp_check/ts1
-	mkdir -p $(citus_abs_srcdir)/tmp_check/ts1
-	rm -rf $(citus_abs_srcdir)/tmp_check/ts0
-	mkdir -p $(citus_abs_srcdir)/tmp_check/ts0
-	rm -rf $(citus_abs_srcdir)/tmp_check/ts2
-	mkdir -p $(citus_abs_srcdir)/tmp_check/ts2
 
 # How this target works:
 # cpp is used before running isolation tests to preprocess spec files.
@@ -107,7 +99,7 @@ check-base: all
 	-- $(MULTI_REGRESS_OPTS) --schedule=$(citus_abs_srcdir)/base_schedule $(EXTRA_TESTS)
 
 # check-minimal only sets up the cluster
-check-minimal: all create-tablespaces
+check-minimal: all
 	$(pg_regress_multi_check) --load-extension=citus \
 	-- $(MULTI_REGRESS_OPTS) --schedule=$(citus_abs_srcdir)/minimal_schedule $(EXTRA_TESTS)
 
@@ -135,6 +127,22 @@ check-failure-custom-schedule: all
 check-isolation-custom-schedule: all  $(isolation_test_files)
 	$(pg_regress_multi_check) --load-extension=citus --isolationtester \
 	-- $(MULTI_REGRESS_OPTS) --inputdir=$(citus_abs_srcdir)/build --schedule=$(citus_abs_srcdir)/$(SCHEDULE) $(EXTRA_TESTS)
+
+check-custom-schedule-vg: all
+	$(pg_regress_multi_check) --load-extension=citus \
+	--valgrind --pg_ctl-timeout=360 --connection-timeout=500000 --valgrind-path=valgrind --valgrind-log-file=$(CITUS_VALGRIND_LOG_FILE) \
+	-- $(MULTI_REGRESS_OPTS) --schedule=$(citus_abs_srcdir)/$(SCHEDULE) $(EXTRA_TESTS)
+
+check-failure-custom-schedule-vg: all
+	$(pg_regress_multi_check) --load-extension=citus --mitmproxy \
+	--valgrind --pg_ctl-timeout=360 --connection-timeout=500000 --valgrind-path=valgrind --valgrind-log-file=$(CITUS_VALGRIND_LOG_FILE) \
+	-- $(MULTI_REGRESS_OPTS) --schedule=$(citus_abs_srcdir)/$(SCHEDULE) $(EXTRA_TESTS)
+
+check-isolation-custom-schedule-vg: all  $(isolation_test_files)
+	$(pg_regress_multi_check) --load-extension=citus --isolationtester \
+	--valgrind --pg_ctl-timeout=360 --connection-timeout=500000 --valgrind-path=valgrind --valgrind-log-file=$(CITUS_VALGRIND_LOG_FILE) \
+	-- $(MULTI_REGRESS_OPTS) --inputdir=$(citus_abs_srcdir)/build --schedule=$(citus_abs_srcdir)/$(SCHEDULE) $(EXTRA_TESTS)
+
 
 check-empty: all
 	$(pg_regress_multi_check) --load-extension=citus \
@@ -285,4 +293,3 @@ clean distclean maintainer-clean:
 	rm -rf tmp_check/
 	rm -rf tmp_citus_test/
 
-all: create-tablespaces

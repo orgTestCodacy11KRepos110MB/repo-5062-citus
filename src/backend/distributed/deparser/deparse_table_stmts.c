@@ -113,6 +113,33 @@ AppendAlterTableStmt(StringInfo buf, AlterTableStmt *stmt)
 
 
 /*
+ * AppendColumnNameList converts a list of columns into comma separated string format
+ * (colname_1, colname_2, .., colname_n).
+ */
+static void
+AppendColumnNameList(StringInfo buf, List *columns)
+{
+	appendStringInfoString(buf, " (");
+
+	ListCell *lc;
+	bool firstkey = true;
+
+	foreach(lc, columns)
+	{
+		if (firstkey == false)
+		{
+			appendStringInfoString(buf, ", ");
+		}
+
+		appendStringInfo(buf, "%s", quote_identifier(strVal(lfirst(lc))));
+		firstkey = false;
+	}
+
+	appendStringInfoString(buf, " )");
+}
+
+
+/*
  * AppendAlterTableCmdAddConstraint builds the add constraint command for index constraints
  * in the ADD CONSTRAINT <conname> {PRIMARY KEY, UNIQUE, EXCLUSION} form and appends it to the buf.
  */
@@ -141,7 +168,7 @@ AppendAlterTableCmdAddConstraint(StringInfo buf, Constraint *constraint,
 		if (constraint->contype == CONSTR_PRIMARY)
 		{
 			appendStringInfoString(buf,
-								   " PRIMARY KEY (");
+								   " PRIMARY KEY ");
 		}
 		else
 		{
@@ -153,44 +180,15 @@ AppendAlterTableCmdAddConstraint(StringInfo buf, Constraint *constraint,
 				appendStringInfoString(buf, " NULLS NOT DISTINCT");
 			}
 #endif
-			appendStringInfoString(buf, " (");
 		}
 
-		ListCell *lc;
-		bool firstkey = true;
-
-		foreach(lc, constraint->keys)
-		{
-			if (firstkey == false)
-			{
-				appendStringInfoString(buf, ", ");
-			}
-
-			appendStringInfo(buf, "%s", quote_identifier(strVal(lfirst(lc))));
-			firstkey = false;
-		}
-
-		appendStringInfoString(buf, ")");
+		AppendColumnNameList(buf, constraint->keys);
 
 		if (constraint->including != NULL)
 		{
-			appendStringInfoString(buf, " INCLUDE (");
+			appendStringInfoString(buf, " INCLUDE ");
 
-			firstkey = true;
-
-			foreach(lc, constraint->including)
-			{
-				if (firstkey == false)
-				{
-					appendStringInfoString(buf, ", ");
-				}
-
-				appendStringInfo(buf, "%s", quote_identifier(strVal(lfirst(
-																		lc))));
-				firstkey = false;
-			}
-
-			appendStringInfoString(buf, " )");
+			AppendColumnNameList(buf, constraint->including);
 		}
 	}
 	else if (constraint->contype == CONSTR_EXCLUSION)
@@ -272,6 +270,115 @@ AppendAlterTableCmdAddConstraint(StringInfo buf, Constraint *constraint,
 		{
 			appendStringInfo(buf, " NO INHERIT");
 		}
+	}
+	else if (constraint->contype == CONSTR_FOREIGN)
+	{
+		appendStringInfoString(buf, " FOREIGN KEY");
+
+		AppendColumnNameList(buf, constraint->fk_attrs);
+
+		appendStringInfoString(buf, " REFERENCES");
+
+		appendStringInfo(buf, " %s", quote_identifier(constraint->pktable->relname));
+
+		if (list_length(constraint->pk_attrs) > 0)
+		{
+			AppendColumnNameList(buf, constraint->pk_attrs);
+		}
+
+		/* Append supported options if provided */
+
+		/* FKCONSTR_MATCH_SIMPLE is default. Append matchtype if not default */
+		if (constraint->fk_matchtype == FKCONSTR_MATCH_FULL)
+		{
+			appendStringInfoString(buf, " MATCH FULL");
+		}
+
+		switch (constraint->fk_del_action)
+		{
+			case FKCONSTR_ACTION_SETDEFAULT:
+			{
+				appendStringInfoString(buf, " ON DELETE SET DEFAULT");
+				break;
+			}
+
+			case FKCONSTR_ACTION_SETNULL:
+			{
+				appendStringInfoString(buf, " ON DELETE SET NULL");
+				break;
+			}
+
+			case FKCONSTR_ACTION_NOACTION:
+			{
+				appendStringInfoString(buf, " ON DELETE NO ACTION");
+				break;
+			}
+
+			case FKCONSTR_ACTION_RESTRICT:
+			{
+				appendStringInfoString(buf, " ON DELETE RESTRICT");
+				break;
+			}
+
+			case FKCONSTR_ACTION_CASCADE:
+			{
+				appendStringInfoString(buf, " ON DELETE CASCADE");
+				break;
+			}
+
+			default:
+			{
+				elog(ERROR, "unsupported FK delete action type: %d",
+					 (int) constraint->fk_del_action);
+				break;
+			}
+		}
+
+		switch (constraint->fk_upd_action)
+		{
+			case FKCONSTR_ACTION_SETDEFAULT:
+			{
+				appendStringInfoString(buf, " ON UPDATE SET DEFAULT");
+				break;
+			}
+
+			case FKCONSTR_ACTION_SETNULL:
+			{
+				appendStringInfoString(buf, " ON UPDATE SET NULL");
+				break;
+			}
+
+			case FKCONSTR_ACTION_NOACTION:
+			{
+				appendStringInfoString(buf, " ON UPDATE NO ACTION");
+				break;
+			}
+
+			case FKCONSTR_ACTION_RESTRICT:
+			{
+				appendStringInfoString(buf, " ON UPDATE RESTRICT");
+				break;
+			}
+
+			case FKCONSTR_ACTION_CASCADE:
+			{
+				appendStringInfoString(buf, " ON UPDATE CASCADE");
+				break;
+			}
+
+			default:
+			{
+				elog(ERROR, "unsupported FK update action type: %d",
+					 (int) constraint->fk_upd_action);
+				break;
+			}
+		}
+	}
+
+	/* FOREIGN KEY and CHECK constraints migth have NOT VALID option */
+	if (constraint->skip_validation)
+	{
+		appendStringInfoString(buf, " NOT VALID ");
 	}
 
 	if (constraint->deferrable)
