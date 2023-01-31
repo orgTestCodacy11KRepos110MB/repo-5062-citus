@@ -27,8 +27,20 @@ test_file_name = args['test_name']
 use_base_schedule = args['use_base_schedule']
 use_whole_schedule_line = args['use_whole_schedule_line']
 
-test_files_to_skip = ['multi_cluster_management', 'multi_extension', 'multi_test_helpers', 'multi_insert_select']
-test_files_to_run_without_schedule = ['single_node_enterprise']
+test_files_to_skip = ['multi_extension', 'multi_test_helpers', 'multi_insert_select']
+
+class TestDeps:
+    schedule: str | None
+    dependencies: list[str]
+
+    def __init__(self, schedule, dependencies=None):
+        self.schedule = schedule
+        self.dependencies = dependencies or []
+
+deps = {
+    'multi_cluster_management': TestDeps(None, ['multi_test_helpers_superuser']),
+    'single_node_enterprise': TestDeps(None),
+}
 
 if not (test_file_name or test_file_path):
     print(f"FATAL: No test given.")
@@ -57,6 +69,7 @@ if test_file_name in test_files_to_skip:
     sys.exit(0)
 
 test_schedule = ''
+dependencies = []
 
 # find related schedule
 for schedule_file_path in sorted(glob(os.path.join(regress_dir, "*_schedule"))):
@@ -71,9 +84,14 @@ for schedule_file_path in sorted(glob(os.path.join(regress_dir, "*_schedule"))):
         else:
             continue
         break
+else:
+    raise Exception("Test could not be found in any schedule")
 
+if test_file_name in deps:
+    test_schedule = deps[test_file_name].schedule
+    dependencies = deps[test_file_name].dependencies
 # map suitable schedule
-if not test_schedule:
+elif not test_schedule:
     print(
         f"WARNING: Could not find any schedule for '{test_file_name}'"
     )
@@ -107,16 +125,18 @@ else:
 tmp_schedule_path = os.path.join(regress_dir, f"tmp_schedule_{ random.randint(1, 10000)}")
 # some tests don't need a schedule to run
 # e.g tests that are in the first place in their own schedule
-if test_file_name not in test_files_to_run_without_schedule:
+if test_schedule:
     shutil.copy2(os.path.join(regress_dir, test_schedule), tmp_schedule_path)
 with open(tmp_schedule_path, "a") as myfile:
+        for dependency in dependencies:
+            myfile.write(f'test: {dependency}\n')
         for i in range(args['repeat']):
             myfile.write(test_schedule_line)
 
 # find suitable make recipe
-if "isolation" in test_schedule:
+if test_schedule == 'base_isolation_schedule':
     make_recipe = 'check-isolation-custom-schedule'
-elif "failure" in test_schedule:
+if test_schedule == 'failure_base_schedule':
     make_recipe = 'check-failure-custom-schedule'
 else:
     make_recipe = 'check-custom-schedule'
