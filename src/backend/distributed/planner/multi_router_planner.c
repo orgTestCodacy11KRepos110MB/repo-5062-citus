@@ -198,6 +198,9 @@ static DeferredErrorMessage * TargetlistAndFunctionsSupported(Oid resultRelation
 															  CmdType commandType,
 															  List *returningList);
 
+static DeferredErrorMessage * InsertPartitionColumnMatchesSource(Query *query,
+																 RangeTblEntry *resultRte);
+
 
 /*
  * CreateRouterPlan attempts to create a router executor plan for the given
@@ -989,6 +992,13 @@ MergeQuerySupported(Query *originalQuery,
 		{
 			return deferredError;
 		}
+	}
+
+	deferredError =
+		InsertPartitionColumnMatchesSource(originalQuery, resultRte);
+	if (deferredError)
+	{
+		return deferredError;
 	}
 
 	#endif
@@ -4333,4 +4343,81 @@ QueryHasMergeCommand(Query *queryTree)
 
 	return true;
 	#endif
+}
+
+
+/*
+ * InsertPartitionColumnMatchesSource check to see if we are inserting a
+ * value into the target which is not from the source table, if so, it
+ * raises an exception.
+ * Note: Inserting random values other than the joined column values will
+ * result in unexpected behaviour of rows ending up in incorrect shards.
+ */
+static DeferredErrorMessage *
+InsertPartitionColumnMatchesSource(Query *query, RangeTblEntry *resultRte)
+{
+	if (!IsCitusTableType(resultRte->relid, DISTRIBUTED_TABLE))
+	{
+		return NULL;
+	}
+
+	bool foundDistributionColumn = false;
+	MergeAction *action = NULL;
+	foreach_ptr(action, query->mergeActionList)
+	{
+		/* Skip MATCHED clauses */
+		if (action->matched)
+		{
+			continue;
+		}
+
+		/* NOT MATCHED can have either INSERT or DO NOTHING */
+		if (action->commandType == CMD_NOTHING)
+		{
+			return NULL;
+		}
+
+		if (action->targetList == NIL)
+		{
+			/* INSERT DEFAULT VALUES is not allowed */
+			return DeferredError(ERRCODE_FEATURE_NOT_SUPPORTED,
+								 "cannot perform MERGE INSERT with DEFAULTS",
+								 NULL, NULL);
+		}
+
+		Assert(action->commandType == CMD_INSERT);
+		Var *distributionKey = PartitionColumn(resultRte->relid, 1);
+
+		TargetEntry *targetEntry = NULL;
+		foreach_ptr(targetEntry, action->targetList)
+		{
+			/* can we have resjunk entries here? */
+			AttrNumber originalAttrNo = targetEntry->resno;
+
+			/* skip processing of target table non-partition columns */
+			if (originalAttrNo != distributionKey->varattno)
+			{
+				continue;
+			}
+
+			foundDistributionColumn = true;
+
+			if (targetEntry->expr && targetEntry->expr->type != T_Var)
+			{
+				return DeferredError(ERRCODE_FEATURE_NOT_SUPPORTED,
+									 "MERGE INSERT must refer a source column "
+									 "for distribution column ",
+									 NULL, NULL);
+			}
+		}
+
+		if (!foundDistributionColumn)
+		{
+			return DeferredError(ERRCODE_FEATURE_NOT_SUPPORTED,
+								 "MERGE INSERT must have distribution column as value",
+								 NULL, NULL);
+		}
+	}
+
+	return NULL;
 }

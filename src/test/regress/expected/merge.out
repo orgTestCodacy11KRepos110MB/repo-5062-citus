@@ -2168,6 +2168,25 @@ ROLLBACK;
 --
 -- Error and Unsupported scenarios
 --
+-- try inserting unmatched distribution column value
+MERGE INTO citus_target t
+USING citus_source s
+ON t.id = s.id
+WHEN NOT MATCHED THEN
+  INSERT DEFAULT VALUES;
+ERROR:  cannot perform MERGE INSERT with DEFAULTS
+MERGE INTO citus_target t
+USING citus_source s
+ON t.id = s.id
+WHEN NOT MATCHED THEN
+  INSERT VALUES(10000);
+ERROR:  MERGE INSERT must refer a source column for distribution column
+MERGE INTO citus_target t
+USING citus_source s
+ON t.id = s.id
+WHEN NOT MATCHED THEN
+  INSERT (id) VALUES(1000);
+ERROR:  MERGE INSERT must refer a source column for distribution column
 -- try updating the distribution key column
 BEGIN;
 MERGE INTO target_cj t

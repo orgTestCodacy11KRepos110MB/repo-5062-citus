@@ -1421,6 +1421,25 @@ ROLLBACK;
 -- Error and Unsupported scenarios
 --
 
+-- try inserting unmatched distribution column value
+MERGE INTO citus_target t
+USING citus_source s
+ON t.id = s.id
+WHEN NOT MATCHED THEN
+  INSERT DEFAULT VALUES;
+
+MERGE INTO citus_target t
+USING citus_source s
+ON t.id = s.id
+WHEN NOT MATCHED THEN
+  INSERT VALUES(10000);
+
+MERGE INTO citus_target t
+USING citus_source s
+ON t.id = s.id
+WHEN NOT MATCHED THEN
+  INSERT (id) VALUES(1000);
+
 -- try updating the distribution key column
 BEGIN;
 MERGE INTO target_cj t
